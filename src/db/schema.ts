@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
-  index,
   integer,
   jsonb,
   pgTable,
@@ -9,40 +8,60 @@ import {
   timestamp,
   uniqueIndex,
   uuid,
+  index,
 } from "drizzle-orm/pg-core";
 
 /* ------------------------------------------------------------------ */
-/*  Channels — independent entertainment brands                        */
+/*  PHASE 8 — Multi-user / multi-tenant ownership                      */
+/*                                                                     */
+/*  Every user-owned table carries a `userId` column referencing        */
+/*  auth.users(id). RLS policies enforce that users can only access    */
+/*  their own rows. The Drizzle client (server-side, service-role)     */
+/*  bypasses RLS, so all queries in engine/actions MUST explicitly     */
+/*  filter by userId.                                                  */
 /* ------------------------------------------------------------------ */
-export const channels = pgTable("channels", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  niche: text("niche").notNull().default(""),
-  description: text("description").notNull().default(""),
-  contentStyle: text("content_style").notNull().default(""),
-  targetAudience: text("target_audience").notNull().default(""),
-  postingFrequency: text("posting_frequency").notNull().default(""),
-  preferredLength: text("preferred_length").notNull().default(""),
-  voiceTone: text("voice_tone").notNull().default(""),
-  targetPlatforms: jsonb("target_platforms")
-    .$type<string[]>()
-    .notNull()
-    .default(sql`'[]'::jsonb`),
-  color: text("color").notNull().default("#C6F135"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
 
 /* ------------------------------------------------------------------ */
-/*  Stories — raw discovered entertainment stories                     */
+/*  Channels — independent entertainment brands (user-owned)           */
+/* ------------------------------------------------------------------ */
+export const channels = pgTable(
+  "channels",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    niche: text("niche").notNull().default(""),
+    description: text("description").notNull().default(""),
+    contentStyle: text("content_style").notNull().default(""),
+    targetAudience: text("target_audience").notNull().default(""),
+    postingFrequency: text("posting_frequency").notNull().default(""),
+    preferredLength: text("preferred_length").notNull().default(""),
+    voiceTone: text("voice_tone").notNull().default(""),
+    targetPlatforms: jsonb("target_platforms")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    color: text("color").notNull().default("#C6F135"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("channels_user_slug_unique").on(t.userId, t.slug),
+    index("channels_user_idx").on(t.userId),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
+/*  Stories — raw discovered entertainment stories (user-owned)        */
 /* ------------------------------------------------------------------ */
 export const stories = pgTable(
   "stories",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
     channelId: uuid("channel_id").references(() => channels.id, {
       onDelete: "cascade",
     }),
@@ -52,10 +71,10 @@ export const stories = pgTable(
     sourceUrl: text("source_url").notNull().default(""),
     discoveredBy: text("discovered_by").notNull().default("story-scout"),
     score: integer("score").notNull().default(0),
-    status: text("status").notNull().default("discovered"), // discovered | selected | rejected | used
+    status: text("status").notNull().default("discovered"),
     tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     sourceAdapter: text("source_adapter").notNull().default("seed"),
-    dedupeKey: text("dedupe_key").unique(),
+    dedupeKey: text("dedupe_key"),
     signals: jsonb("signals")
       .$type<{ score?: number; comments?: number; rank?: number }>()
       .notNull()
@@ -67,36 +86,41 @@ export const stories = pgTable(
   (t) => [
     index("stories_channel_idx").on(t.channelId),
     index("stories_status_idx").on(t.status),
+    index("stories_user_idx").on(t.userId),
   ],
 );
 
 /* ------------------------------------------------------------------ */
-/*  Story sources — configurable discovery inputs for the scout        */
+/*  Story sources — configurable discovery inputs (user-owned)        */
 /* ------------------------------------------------------------------ */
-export const storySources = pgTable("story_sources", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  type: text("type").notNull(), // rss | googlenews | hackernews | reddit | newsapi
-  name: text("name").notNull(),
-  enabled: boolean("enabled").notNull().default(true),
-  channelSlug: text("channel_slug"), // legacy hint, superseded by nicheId
-  /** Phase 7: sources are reusable objects referenced by niches. */
-  nicheId: uuid("niche_id"),
-  config: jsonb("config")
-    .$type<Record<string, unknown>>()
-    .notNull()
-    .default(sql`'{}'::jsonb`),
-  reliability: integer("reliability").notNull().default(70),
-  pollIntervalMinutes: integer("poll_interval_minutes").notNull().default(360),
-  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
-  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
-  lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
-  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
-  lastStatus: text("last_status").notNull().default("never"), // never | ok | error
-  lastError: text("last_error"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const storySources = pgTable(
+  "story_sources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
+    type: text("type").notNull(),
+    name: text("name").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    channelSlug: text("channel_slug"),
+    nicheId: uuid("niche_id"),
+    config: jsonb("config")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    reliability: integer("reliability").notNull().default(70),
+    pollIntervalMinutes: integer("poll_interval_minutes").notNull().default(360),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+    lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+    lastStatus: text("last_status").notNull().default("never"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("story_sources_user_idx").on(t.userId)],
+);
 
 /* ------------------------------------------------------------------ */
 /*  Story evaluations — judge-agent scorecards (history per story)     */
@@ -108,7 +132,7 @@ export const storyEvaluations = pgTable(
     storyId: uuid("story_id")
       .notNull()
       .references(() => stories.id, { onDelete: "cascade" }),
-    provider: text("provider").notNull(), // openai | anthropic | heuristic
+    provider: text("provider").notNull(),
     model: text("model").notNull().default(""),
     viralPotential: integer("viral_potential").notNull().default(0),
     entertainmentValue: integer("entertainment_value").notNull().default(0),
@@ -118,7 +142,7 @@ export const storyEvaluations = pgTable(
     evergreenPotential: integer("evergreen_potential").notNull().default(0),
     sourceReliability: integer("source_reliability").notNull().default(0),
     overall: integer("overall").notNull().default(0),
-    recommendation: text("recommendation").notNull().default("review"), // greenlight | review | reject
+    recommendation: text("recommendation").notNull().default("review"),
     rationale: text("rationale").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -134,10 +158,11 @@ export const agentRuns = pgTable(
   "agent_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id"),
     agentSlug: text("agent_slug").notNull(),
     jobType: text("job_type").notNull(),
-    status: text("status").notNull().default("running"), // running | success | failed
-    trigger: text("trigger").notNull().default("schedule"), // schedule | manual | retry
+    status: text("status").notNull().default("running"),
+    trigger: text("trigger").notNull().default("schedule"),
     stats: jsonb("stats")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -156,12 +181,13 @@ export const agentRuns = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
-/*  Content — a story promoted into the production pipeline            */
+/*  Content — a story promoted into the production pipeline (user-owned) */
 /* ------------------------------------------------------------------ */
 export const content = pgTable(
   "content",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
     channelId: uuid("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
@@ -169,8 +195,8 @@ export const content = pgTable(
       onDelete: "set null",
     }),
     title: text("title").notNull(),
-    format: text("format").notNull().default("Short"), // Short | Long-form | Teaser
-    stage: text("stage").notNull().default("discovered"), // see PIPELINE_STAGES
+    format: text("format").notNull().default("Short"),
+    stage: text("stage").notNull().default("discovered"),
     score: integer("score").notNull().default(0),
     hook: text("hook").notNull().default(""),
     durationSec: integer("duration_sec"),
@@ -190,6 +216,7 @@ export const content = pgTable(
   (t) => [
     index("content_channel_idx").on(t.channelId),
     index("content_stage_idx").on(t.stage),
+    index("content_user_idx").on(t.userId),
   ],
 );
 
@@ -200,7 +227,7 @@ export const channelProductionSettings = pgTable("channel_production_settings", 
   channelId: uuid("channel_id")
     .primaryKey()
     .references(() => channels.id, { onDelete: "cascade" }),
-  format: text("format").notNull().default("Short"), // Short | Long-form | Teaser
+  format: text("format").notNull().default("Short"),
   targetDurationSec: integer("target_duration_sec").notNull().default(55),
   scriptWordTarget: integer("script_word_target").notNull().default(140),
   tone: text("tone").notNull().default("Wry, deadpan narrator"),
@@ -211,15 +238,14 @@ export const channelProductionSettings = pgTable("channel_production_settings", 
   researchDepth: integer("research_depth").notNull().default(4),
   sectionCount: integer("section_count").notNull().default(4),
   writingStyle: text("writing_style").notNull().default("Punchy, concrete, no filler"),
-  pacing: text("pacing").notNull().default("fast"), // fast | measured | slow
+  pacing: text("pacing").notNull().default("fast"),
   minWordCount: integer("min_word_count").notNull().default(90),
   maxWordCount: integer("max_word_count").notNull().default(200),
   language: text("language").notNull().default("en"),
   captionStyle: text("caption_style").notNull().default("bold-centered"),
   wordsPerCue: integer("words_per_cue").notNull().default(4),
-  speakingRate: integer("speaking_rate").notNull().default(150), // wpm
+  speakingRate: integer("speaking_rate").notNull().default(150),
   musicCue: text("music_cue").notNull().default(""),
-  /** Which pipeline steps run for this channel; others are skipped. */
   requiredSteps: jsonb("required_steps")
     .$type<string[]>()
     .notNull()
@@ -242,7 +268,6 @@ export const productionJobs = pgTable(
     channelId: uuid("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
-    // queued | running | awaiting_review | completed | failed | cancelled
     status: text("status").notNull().default("queued"),
     currentStep: text("current_step").notNull().default("research"),
     completedSteps: integer("completed_steps").notNull().default(0),
@@ -261,8 +286,6 @@ export const productionJobs = pgTable(
       .defaultNow(),
   },
   (t) => [
-    // One production job per content item — enforced in the DB so
-    // concurrent cron ticks can never create duplicates.
     uniqueIndex("production_jobs_content_unique").on(t.contentId),
     index("production_jobs_status_idx").on(t.status),
   ],
@@ -282,11 +305,9 @@ export const productionSteps = pgTable(
     label: text("label").notNull().default(""),
     agentSlug: text("agent_slug").notNull().default(""),
     position: integer("position").notNull().default(0),
-    // pending | running | success | failed | skipped
     status: text("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     provider: text("provider").notNull().default(""),
-    /** real_ai | fallback | human | failed — never conflate these */
     generationMode: text("generation_mode").notNull().default("pending"),
     input: jsonb("input")
       .$type<Record<string, unknown>>()
@@ -331,7 +352,6 @@ export const contentDrafts = pgTable(
       onDelete: "cascade",
     }),
     version: integer("version").notNull().default(1),
-    // in_progress | ready_for_review | approved | changes_requested
     status: text("status").notNull().default("in_progress"),
     concept: text("concept").notNull().default(""),
     angle: text("angle").notNull().default(""),
@@ -371,7 +391,6 @@ export const contentDrafts = pgTable(
     estimatedDurationSec: integer("estimated_duration_sec").notNull().default(0),
     qcScore: integer("qc_score").notNull().default(0),
     reviewNotes: text("review_notes"),
-    /** real_ai | fallback | mixed — surfaced in the UI on every draft */
     generationMode: text("generation_mode").notNull().default("pending"),
     provider: text("provider").notNull().default(""),
     concepts: jsonb("concepts")
@@ -385,23 +404,19 @@ export const contentDrafts = pgTable(
     videoUrl: text("video_url"),
     audioUrl: text("audio_url"),
     revision: integer("revision").notNull().default(0),
-    /* --- operator-editable publishing metadata (Phase 5) --- */
     description: text("description").notNull().default(""),
     socialCaption: text("social_caption").notNull().default(""),
     hashtags: jsonb("hashtags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    /** fields manually edited by a human, so regeneration can respect them */
     editedFields: jsonb("edited_fields")
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /* --- platform metadata (Phase 6) --- */
     youtubeTitle: text("youtube_title").notNull().default(""),
     youtubeDescription: text("youtube_description").notNull().default(""),
     youtubeTags: jsonb("youtube_tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     youtubeCategoryId: text("youtube_category_id").notNull().default("24"),
     youtubePrivacy: text("youtube_privacy").notNull().default("private"),
     thumbnailAssetId: uuid("thumbnail_asset_id"),
-    /** real_ai | fallback — provenance of the platform metadata */
     metadataMode: text("metadata_mode").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -427,12 +442,11 @@ export const productionAssets = pgTable(
       .notNull()
       .references(() => productionJobs.id, { onDelete: "cascade" }),
     stepKey: text("step_key").notNull().default(""),
-    kind: text("kind").notNull(), // image | audio | video | captions
+    kind: text("kind").notNull(),
     sceneNumber: integer("scene_number"),
     prompt: text("prompt").notNull().default(""),
     provider: text("provider").notNull().default(""),
     model: text("model").notNull().default(""),
-    /** generated | unavailable | failed */
     status: text("status").notNull().default("generated"),
     url: text("url"),
     filePath: text("file_path"),
@@ -465,13 +479,12 @@ export const aiUsage = pgTable(
       onDelete: "cascade",
     }),
     stepKey: text("step_key").notNull().default(""),
-    kind: text("kind").notNull().default("text"), // text | image | audio | video
+    kind: text("kind").notNull().default("text"),
     provider: text("provider").notNull().default(""),
     model: text("model").notNull().default(""),
     promptTokens: integer("prompt_tokens").notNull().default(0),
     completionTokens: integer("completion_tokens").notNull().default(0),
     generations: integer("generations").notNull().default(0),
-    /** micro-USD (millionths) to avoid float drift */
     costMicroUsd: integer("cost_micro_usd").notNull().default(0),
     durationMs: integer("duration_ms").notNull().default(0),
     success: boolean("success").notNull().default(true),
@@ -493,9 +506,7 @@ export const draftRevisions = pgTable(
       .notNull()
       .references(() => productionJobs.id, { onDelete: "cascade" }),
     revision: integer("revision").notNull().default(1),
-    /** which step the revision rewinds to */
     targetStep: text("target_step").notNull().default("script"),
-    /** rewind | manual_edit | restore */
     kind: text("kind").notNull().default("rewind"),
     changedFields: jsonb("changed_fields")
       .$type<string[]>()
@@ -503,7 +514,6 @@ export const draftRevisions = pgTable(
       .default(sql`'[]'::jsonb`),
     reason: text("reason").notNull().default(""),
     requestedBy: text("requested_by").notNull().default("operator"),
-    /** full snapshot of the draft before the rewrite */
     snapshot: jsonb("snapshot")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -523,7 +533,6 @@ export const channelStrategy = pgTable("channel_strategy", {
     .primaryKey()
     .references(() => channels.id, { onDelete: "cascade" }),
   postsPerWeek: integer("posts_per_week").notNull().default(5),
-  /** ["09:00","17:30"] local to the channel timezone */
   postingWindows: jsonb("posting_windows")
     .$type<string[]>()
     .notNull()
@@ -539,39 +548,35 @@ export const channelStrategy = pgTable("channel_strategy", {
     .$type<Record<string, number>>()
     .notNull()
     .default(sql`'{}'::jsonb`),
-  /** Human approval is required before anything can be published. */
   requireApproval: boolean("require_approval").notNull().default(true),
-  /** Auto-publish is OFF by default and must be explicitly enabled. */
   autoPublish: boolean("auto_publish").notNull().default(false),
   minQcScore: integer("min_qc_score").notNull().default(60),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 /* ------------------------------------------------------------------ */
-/*  Publish accounts — per-platform destinations.                      */
-/*  NOTE: no raw secrets. Credentials resolve from environment vars    */
-/*  via `credentialRef`; only non-sensitive identifiers live here.     */
+/*  Publish accounts — user-owned platform destinations.              */
+/*  Phase 8: user-owned, NOT channel-owned. A user can connect         */
+/*  multiple YouTube channels, TikTok accounts, etc.                   */
+/*  channelId is kept nullable for backward compatibility.             */
 /* ------------------------------------------------------------------ */
 export const publishAccounts = pgTable(
   "publish_accounts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    channelId: uuid("channel_id")
-      .notNull()
-      .references(() => channels.id, { onDelete: "cascade" }),
-    platform: text("platform").notNull(), // youtube | tiktok | instagram | facebook
+    userId: uuid("user_id").notNull(),
+    channelId: uuid("channel_id").references(() => channels.id, {
+      onDelete: "set null",
+    }),
+    platform: text("platform").notNull(),
     displayName: text("display_name").notNull().default(""),
     handle: text("handle").notNull().default(""),
     externalAccountId: text("external_account_id").notNull().default(""),
-    /** Name of the env var holding the token — never the token itself. */
     credentialRef: text("credential_ref").notNull().default(""),
-    /** not_connected | credentials_required | connected | error | expired */
     status: text("status").notNull().default("not_connected"),
     lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
     lastError: text("last_error"),
     enabled: boolean("enabled").notNull().default(true),
-    /* --- OAuth (Phase 6). Tokens are AES-256-GCM encrypted at rest;
-       the key lives only in TOKEN_ENCRYPTION_KEY, never in the DB. --- */
     encryptedTokens: text("encrypted_tokens"),
     tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
     scopes: jsonb("scopes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
@@ -581,18 +586,53 @@ export const publishAccounts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("publish_accounts_channel_idx").on(t.channelId, t.platform),
-    uniqueIndex("publish_accounts_unique").on(t.channelId, t.platform),
+    index("publish_accounts_user_idx").on(t.userId, t.platform),
+    // Prevent the same user from connecting the same external account twice.
+    uniqueIndex("publish_accounts_user_external_unique").on(
+      t.userId,
+      t.externalAccountId,
+      t.platform,
+    ),
   ],
 );
 
 /* ------------------------------------------------------------------ */
-/*  Publish jobs — one per (content, platform) distribution intent     */
+/*  Niche destinations — many-to-many junction between niches and     */
+/*  publish accounts. A niche can publish to zero, one, or many        */
+/*  destinations. A destination can serve multiple niches.             */
+/* ------------------------------------------------------------------ */
+export const nicheDestinations = pgTable(
+  "niche_destinations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nicheId: uuid("niche_id")
+      .notNull()
+      .references(() => niches.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => publishAccounts.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("niche_destinations_unique").on(t.nicheId, t.accountId),
+    index("niche_destinations_niche_idx").on(t.nicheId),
+    index("niche_destinations_account_idx").on(t.accountId),
+  ],
+);
+
+/* ------------------------------------------------------------------ */
+/*  Publish jobs — one per (content, account) distribution intent      */
+/*  Phase 8: accountId replaces platform as the routing key, allowing */
+/*  the same content to publish to multiple accounts on the same       */
+/*  platform (e.g. two YouTube channels).                               */
 /* ------------------------------------------------------------------ */
 export const publishJobs = pgTable(
   "publish_jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
     contentId: uuid("content_id")
       .notNull()
       .references(() => content.id, { onDelete: "cascade" }),
@@ -611,7 +651,6 @@ export const publishJobs = pgTable(
     description: text("description").notNull().default(""),
     caption: text("caption").notNull().default(""),
     hashtags: jsonb("hashtags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    /** draft | ready | scheduled | publishing | published | failed | cancelled */
     status: text("status").notNull().default("draft"),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
@@ -623,13 +662,9 @@ export const publishJobs = pgTable(
       .$type<string[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
-    /* --- upload lifecycle (Phase 6) --- */
-    /** idle | initiating | uploading | processing | complete | failed */
     uploadState: text("upload_state").notNull().default("idle"),
     uploadProgressBp: integer("upload_progress_bp").notNull().default(0),
-    /** resumable session URI — allows a retry to continue, not restart */
     uploadSessionUrl: text("upload_session_url"),
-    /** stable key so a retry can never create a second remote video */
     idempotencyKey: text("idempotency_key"),
     privacyStatus: text("privacy_status").notNull().default("private"),
     categoryId: text("category_id").notNull().default("24"),
@@ -642,7 +677,9 @@ export const publishJobs = pgTable(
   (t) => [
     index("publish_jobs_status_idx").on(t.status, t.scheduledAt),
     index("publish_jobs_content_idx").on(t.contentId),
-    uniqueIndex("publish_jobs_unique_target").on(t.contentId, t.platform),
+    index("publish_jobs_user_idx").on(t.userId),
+    // One job per (content, account) — prevents duplicate publishing to the same destination.
+    uniqueIndex("publish_jobs_content_account_unique").on(t.contentId, t.accountId),
   ],
 );
 
@@ -657,7 +694,6 @@ export const publishAttempts = pgTable(
       .notNull()
       .references(() => publishJobs.id, { onDelete: "cascade" }),
     attempt: integer("attempt").notNull().default(1),
-    /** success | failed | blocked */
     outcome: text("outcome").notNull(),
     platform: text("platform").notNull().default(""),
     adapter: text("adapter").notNull().default(""),
@@ -683,6 +719,7 @@ export const publishedPosts = pgTable(
   "published_posts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull(),
     jobId: uuid("job_id").references(() => publishJobs.id, { onDelete: "set null" }),
     contentId: uuid("content_id")
       .notNull()
@@ -690,6 +727,7 @@ export const publishedPosts = pgTable(
     channelId: uuid("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id"),
     platform: text("platform").notNull(),
     platformPostId: text("platform_post_id").notNull(),
     platformUrl: text("platform_url").notNull().default(""),
@@ -699,6 +737,7 @@ export const publishedPosts = pgTable(
   },
   (t) => [
     index("published_posts_content_idx").on(t.contentId),
+    index("published_posts_user_idx").on(t.userId),
     uniqueIndex("published_posts_unique").on(t.platform, t.platformPostId),
   ],
 );
@@ -724,19 +763,17 @@ export const postMetrics = pgTable(
     saves: integer("saves"),
     watchTimeSec: integer("watch_time_sec"),
     avgViewDurationSec: integer("avg_view_duration_sec"),
-    completionRateBp: integer("completion_rate_bp"), // basis points (0-10000)
+    completionRateBp: integer("completion_rate_bp"),
     followersGained: integer("followers_gained"),
     followersLost: integer("followers_lost"),
     avgViewPercentageBp: integer("avg_view_percentage_bp"),
     impressions: integer("impressions"),
-    ctrBp: integer("ctr_bp"), // basis points
+    ctrBp: integer("ctr_bp"),
     raw: jsonb("raw").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
   },
   (t) => [
     index("post_metrics_post_idx").on(t.postId, t.measuredAt),
     index("post_metrics_content_idx").on(t.contentId, t.measuredAt),
-    // One snapshot per post per measurement instant — prevents duplicate
-    // analytics rows while preserving full history.
     uniqueIndex("post_metrics_snapshot_unique").on(t.platform, t.platformPostId, t.measuredAt),
   ],
 );
@@ -748,18 +785,14 @@ export const performanceSignals = pgTable(
   "performance_signals",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** topic | source | hook | channel | platform */
     dimension: text("dimension").notNull(),
     key: text("key").notNull(),
     label: text("label").notNull().default(""),
     sampleSize: integer("sample_size").notNull().default(0),
     avgViews: integer("avg_views").notNull().default(0),
     avgEngagementBp: integer("avg_engagement_bp").notNull().default(0),
-    /** global baseline this key is compared against */
     baselineViews: integer("baseline_views").notNull().default(0),
-    /** -10..+10 score fed to the judge; 0 when confidence is low */
     adjustment: integer("adjustment").notNull().default(0),
-    /** none | low | medium | high */
     confidence: text("confidence").notNull().default("none"),
     explanation: text("explanation").notNull().default(""),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
@@ -776,6 +809,7 @@ export const oauthStates = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     state: text("state").notNull().unique(),
     platform: text("platform").notNull(),
+    userId: uuid("user_id"),
     channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
     redirectTo: text("redirect_to").notNull().default("/publishing"),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
@@ -786,48 +820,44 @@ export const oauthStates = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
-/*  Notifications — operator attention feed                            */
+/*  Notifications — operator attention feed (user-owned)              */
 /* ------------------------------------------------------------------ */
 export const notifications = pgTable(
   "notifications",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** info | success | warning | error */
+    userId: uuid("user_id").notNull(),
     severity: text("severity").notNull().default("info"),
     category: text("category").notNull().default("system"),
     title: text("title").notNull(),
     body: text("body").notNull().default(""),
     href: text("href"),
-    /** stable key so the same condition is not repeatedly re-notified */
-    dedupeKey: text("dedupe_key").unique(),
+    dedupeKey: text("dedupe_key"),
     readAt: timestamp("read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("notifications_created_idx").on(t.createdAt)],
+  (t) => [
+    index("notifications_created_idx").on(t.createdAt),
+    index("notifications_user_idx").on(t.userId, t.createdAt),
+  ],
 );
 
-
-/* ================================================================== */
-/*  PHASE 7 — Niches, durable job queue, workers, observability       */
-/* ================================================================== */
-
 /* ------------------------------------------------------------------ */
-/*  Niches — first-class configuration objects.                        */
-/*  A niche binds: scouting → sources → judging → production →         */
+/*  Niches — first-class user-owned configuration objects.            */
+/*  A niche binds: scouting → sources → judging → production →        */
 /*  publishing. One reusable engine, many niche configurations.        */
 /* ------------------------------------------------------------------ */
 export const niches = pgTable(
   "niches",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),
+    userId: uuid("user_id").notNull(),
+    slug: text("slug").notNull(),
     name: text("name").notNull(),
     description: text("description").notNull().default(""),
-    /** active | paused | archived */
     status: text("status").notNull().default("active"),
     color: text("color").notNull().default("#C6F135"),
 
-    /* ---- scouting ---- */
     scoutEnabled: boolean("scout_enabled").notNull().default(true),
     scoutIntervalHours: integer("scout_interval_hours").notNull().default(6),
     maxCandidatesPerCycle: integer("max_candidates_per_cycle").notNull().default(20),
@@ -843,7 +873,6 @@ export const niches = pgTable(
     lastScoutAt: timestamp("last_scout_at", { withTimezone: true }),
     nextScoutAt: timestamp("next_scout_at", { withTimezone: true }),
 
-    /* ---- story judge (all niche-configurable, nothing hard-coded) ---- */
     judgeWeights: jsonb("judge_weights")
       .$type<Record<string, number>>()
       .notNull()
@@ -855,15 +884,17 @@ export const niches = pgTable(
     minEngagementSignal: integer("min_engagement_signal").notNull().default(0),
     qualityThreshold: integer("quality_threshold").notNull().default(50),
 
-    /* ---- linkage to existing profiles ---- */
-    /** channel that carries production + publishing profiles for this niche */
     channelId: uuid("channel_id").references(() => channels.id, { onDelete: "set null" }),
 
     archivedAt: timestamp("archived_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("niches_status_idx").on(t.status)],
+  (t) => [
+    uniqueIndex("niches_user_slug_unique").on(t.userId, t.slug),
+    index("niches_status_idx").on(t.status),
+    index("niches_user_idx").on(t.userId),
+  ],
 );
 
 /* ------------------------------------------------------------------ */
@@ -874,7 +905,6 @@ export const workers = pgTable(
   {
     id: text("id").primaryKey(),
     hostname: text("hostname").notNull().default(""),
-    /** idle | busy | stopped */
     status: text("status").notNull().default("idle"),
     concurrency: integer("concurrency").notNull().default(2),
     activeJobs: integer("active_jobs").notNull().default(0),
@@ -890,21 +920,16 @@ export const workers = pgTable(
 
 /* ------------------------------------------------------------------ */
 /*  Work queue — THE durable async job system (single source of truth) */
-/*                                                                     */
-/*  Supersedes ad-hoc in-request execution. automation_jobs remains as */
-/*  the human-readable activity log; this table is the executor.       */
 /* ------------------------------------------------------------------ */
 export const workQueue = pgTable(
   "work_queue",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** scout_cycle | production_step | render | publish | analytics_refresh */
     type: text("type").notNull(),
-    /** queued | running | paused | retrying | completed | failed | cancelled */
     status: text("status").notNull().default("queued"),
-    /** higher runs first: 100 manual, 75 publish, 50 production, 25 scout, 10 analytics */
     priority: integer("priority").notNull().default(50),
 
+    userId: uuid("user_id"),
     nicheId: uuid("niche_id").references(() => niches.id, { onDelete: "cascade" }),
     channelId: uuid("channel_id").references(() => channels.id, { onDelete: "cascade" }),
     contentId: uuid("content_id").references(() => content.id, { onDelete: "cascade" }),
@@ -919,26 +944,21 @@ export const workQueue = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
-    /** de-duplication: at most one live job per key */
     dedupeKey: text("dedupe_key"),
 
     currentStep: text("current_step").notNull().default(""),
-    /** honest state text; percent only when genuinely measurable */
     progressLabel: text("progress_label").notNull().default(""),
     progressBp: integer("progress_bp"),
 
     attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
     lastError: text("last_error"),
-    /** transient | permanent — drives whether a retry is scheduled */
     errorKind: text("error_kind"),
 
-    /* ---- lease / ownership ---- */
     workerId: text("worker_id"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
 
-    /** operator asked to cancel while a critical op was in flight */
     cancelRequested: boolean("cancel_requested").notNull().default(false),
 
     runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
@@ -948,11 +968,10 @@ export const workQueue = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // claim path: status + runAfter + priority
     index("work_queue_claim_idx").on(t.status, t.runAfter, t.priority),
     index("work_queue_niche_idx").on(t.nicheId, t.status),
     index("work_queue_lease_idx").on(t.leaseExpiresAt),
-    // at most one live job per dedupe key (partial unique enforced in code+index)
+    index("work_queue_user_idx").on(t.userId),
     uniqueIndex("work_queue_dedupe_unique").on(t.dedupeKey),
   ],
 );
@@ -970,8 +989,6 @@ export const jobEvents = pgTable(
     workerId: text("worker_id"),
     attempt: integer("attempt").notNull().default(1),
     step: text("step").notNull().default(""),
-    /** claimed | started | progress | succeeded | failed | retry_scheduled |
-        lease_expired | reclaimed | cancelled | paused | resumed */
     event: text("event").notNull(),
     provider: text("provider").notNull().default(""),
     durationMs: integer("duration_ms"),
@@ -988,7 +1005,7 @@ export const jobEvents = pgTable(
 );
 
 /* ------------------------------------------------------------------ */
-/*  Agents — the AI workforce registry                                 */
+/*  Agents — the AI workforce registry (global, not user-owned)       */
 /* ------------------------------------------------------------------ */
 export const agents = pgTable("agents", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -997,10 +1014,10 @@ export const agents = pgTable("agents", {
   role: text("role").notNull().default(""),
   description: text("description").notNull().default(""),
   icon: text("icon").notNull().default("Bot"),
-  status: text("status").notNull().default("idle"), // idle | running | paused | error
+  status: text("status").notNull().default("idle"),
   currentTask: text("current_task"),
   lastTask: text("last_task"),
-  lastTaskStatus: text("last_task_status").notNull().default("success"), // success | failure
+  lastTaskStatus: text("last_task_status").notNull().default("success"),
   lastRunAt: timestamp("last_run_at", { withTimezone: true }),
   successRate: integer("success_rate").notNull().default(100),
   totalRuns: integer("total_runs").notNull().default(0),
@@ -1025,7 +1042,7 @@ export const workflows = pgTable("workflows", {
   }),
   name: text("name").notNull(),
   type: text("type").notNull().default("content_pipeline"),
-  status: text("status").notNull().default("running"), // queued | running | completed | failed
+  status: text("status").notNull().default("running"),
   currentStage: text("current_stage").notNull().default("discovered"),
   steps: jsonb("steps").$type<WorkflowStep[]>().notNull().default(sql`'[]'::jsonb`),
   startedAt: timestamp("started_at", { withTimezone: true })
@@ -1035,7 +1052,9 @@ export const workflows = pgTable("workflows", {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Publishing jobs — per-platform distribution tasks                  */
+/*  Legacy tables — kept for backward compatibility / migration        */
+/*  These are superseded by the modern publish_jobs / post_metrics      */
+/*  system but not dropped to avoid data loss.                          */
 /* ------------------------------------------------------------------ */
 export const publishingJobs = pgTable(
   "publishing_jobs",
@@ -1044,8 +1063,8 @@ export const publishingJobs = pgTable(
     contentId: uuid("content_id")
       .notNull()
       .references(() => content.id, { onDelete: "cascade" }),
-    platform: text("platform").notNull(), // youtube | tiktok | instagram | x
-    status: text("status").notNull().default("queued"), // queued | publishing | published | failed
+    platform: text("platform").notNull(),
+    status: text("status").notNull().default("queued"),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
     publishedAt: timestamp("published_at", { withTimezone: true }),
     attempts: integer("attempts").notNull().default(0),
@@ -1058,9 +1077,6 @@ export const publishingJobs = pgTable(
   (t) => [index("pub_jobs_status_idx").on(t.status)],
 );
 
-/* ------------------------------------------------------------------ */
-/*  Analytics snapshots — cumulative per-content / per-platform stats  */
-/* ------------------------------------------------------------------ */
 export const analyticsSnapshots = pgTable(
   "analytics_snapshots",
   {
@@ -1084,17 +1100,15 @@ export const analyticsSnapshots = pgTable(
   (t) => [index("snapshots_content_idx").on(t.contentId, t.capturedAt)],
 );
 
-/* ------------------------------------------------------------------ */
-/*  Automation jobs — scheduled system tasks (discovery, sync, ...)    */
-/* ------------------------------------------------------------------ */
 export const automationJobs = pgTable(
   "automation_jobs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    type: text("type").notNull(), // story_discovery | analytics_sync | publishing | script_generation | ...
+    userId: uuid("user_id"),
+    type: text("type").notNull(),
     label: text("label").notNull().default(""),
-    status: text("status").notNull().default("queued"), // queued | running | success | failed
-    trigger: text("trigger").notNull().default("schedule"), // schedule | manual | retry
+    status: text("status").notNull().default("queued"),
+    trigger: text("trigger").notNull().default("schedule"),
     payload: jsonb("payload")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -1110,35 +1124,43 @@ export const automationJobs = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("automation_status_idx").on(t.status)],
+  (t) => [
+    index("automation_status_idx").on(t.status),
+    index("automation_user_idx").on(t.userId),
+  ],
 );
 
 /* ------------------------------------------------------------------ */
-/*  Automation settings — single-row config                            */
+/*  Automation settings — per-user config (Phase 8)                   */
 /* ------------------------------------------------------------------ */
-export const automationSettings = pgTable("automation_settings", {
-  id: integer("id").primaryKey().default(1),
-  enabled: boolean("enabled").notNull().default(true),
-  discoveryIntervalHours: integer("discovery_interval_hours")
-    .notNull()
-    .default(6),
-  publishWindowStart: text("publish_window_start").notNull().default("09:00"),
-  publishWindowEnd: text("publish_window_end").notNull().default("21:00"),
-  dailyPublishCap: integer("daily_publish_cap").notNull().default(8),
-  maxConcurrentJobs: integer("max_concurrent_jobs").notNull().default(3),
-  autoRetry: boolean("auto_retry").notNull().default(true),
-  judgeThreshold: integer("judge_threshold").notNull().default(72),
-  scoutMaxStoriesPerRun: integer("scout_max_stories_per_run")
-    .notNull()
-    .default(20),
-  retryDelayMinutes: integer("retry_delay_minutes").notNull().default(15),
-  timezone: text("timezone").notNull().default("UTC"),
-  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
-  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const automationSettings = pgTable(
+  "automation_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").notNull().unique(),
+    enabled: boolean("enabled").notNull().default(true),
+    discoveryIntervalHours: integer("discovery_interval_hours")
+      .notNull()
+      .default(6),
+    publishWindowStart: text("publish_window_start").notNull().default("09:00"),
+    publishWindowEnd: text("publish_window_end").notNull().default("21:00"),
+    dailyPublishCap: integer("daily_publish_cap").notNull().default(8),
+    maxConcurrentJobs: integer("max_concurrent_jobs").notNull().default(3),
+    autoRetry: boolean("auto_retry").notNull().default(true),
+    judgeThreshold: integer("judge_threshold").notNull().default(72),
+    scoutMaxStoriesPerRun: integer("scout_max_stories_per_run")
+      .notNull()
+      .default(20),
+    retryDelayMinutes: integer("retry_delay_minutes").notNull().default(15),
+    timezone: text("timezone").notNull().default("UTC"),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("automation_settings_user_idx").on(t.userId)],
+);
 
 /* ------------------------------ types ----------------------------- */
 export type Channel = typeof channels.$inferSelect;
@@ -1175,3 +1197,4 @@ export type WorkItem = typeof workQueue.$inferSelect;
 export type JobEvent = typeof jobEvents.$inferSelect;
 export type StoryEvaluation = typeof storyEvaluations.$inferSelect;
 export type AgentRun = typeof agentRuns.$inferSelect;
+export type NicheDestination = typeof nicheDestinations.$inferSelect;
