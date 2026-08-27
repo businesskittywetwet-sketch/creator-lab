@@ -6,6 +6,7 @@ import { channels } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import * as engine from "@/engine";
 import { seedDatabase } from "@/db/seed";
+import { requireUserId } from "@/lib/supabase/server";
 
 export type ActionState = { ok: boolean; error?: string };
 
@@ -44,8 +45,9 @@ export async function createChannel(
   try {
     const input = channelInputFrom(formData);
     if (!input.name) return { ok: false, error: "Channel name is required." };
+    const userId = await requireUserId();
     const slug = `${slugify(input.name)}-${Math.random().toString(36).slice(2, 6)}`;
-    await db.insert(channels).values({ ...input, slug });
+    await db.insert(channels).values({ ...input, slug, userId });
     revalidatePath("/channels");
     revalidatePath("/overview");
     return { ok: true };
@@ -96,9 +98,11 @@ export async function moveContent(id: string, direction: 1 | -1) {
 export async function advanceStoryToContent(storyId: string) {
   // Promote a discovered story into the pipeline at "selected".
   const { stories, content } = await import("@/db/schema");
+  const userId = await requireUserId();
   const [story] = await db.select().from(stories).where(eq(stories.id, storyId));
   if (!story || !story.channelId) return;
   await db.insert(content).values({
+    userId,
     channelId: story.channelId,
     storyId: story.id,
     title: story.title,

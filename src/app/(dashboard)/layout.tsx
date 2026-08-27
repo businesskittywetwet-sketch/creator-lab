@@ -1,9 +1,9 @@
-import { createServerSupabaseClient, getCurrentUserId } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import AppShell from "@/components/shell";
 import { getAgents } from "@/lib/queries";
-import { scanAttention, unreadCount, listNiches } from "@/engine";
+import { scanAttention, unreadCount } from "@/engine";
 import { timeUntil } from "@/lib/format";
 import { getSettings } from "@/lib/queries";
 
@@ -17,12 +17,11 @@ export default async function DashboardLayout({
   const userId = await getCurrentUserId();
   if (!userId) redirect("/login");
 
-  const [settings, agentRows, attention, unread, niches] = await Promise.all([
-    getSettings(userId),
-    getAgents(userId),
-    scanAttention(userId),
-    unreadCount(userId),
-    listNiches(userId),
+  const [settings, agentRows, attention, unread] = await Promise.all([
+    getSettings(),
+    getAgents(),
+    scanAttention(),
+    unreadCount(),
   ]);
 
   const activeAgents = agentRows.filter((a) => a.status === "running").length;
@@ -37,8 +36,6 @@ export default async function DashboardLayout({
       attentionCount={attentionCount}
       unread={unread}
       reviewCount={reviewCount}
-      niches={niches}
-      userEmail={null}
     >
       {children}
     </AppShell>
