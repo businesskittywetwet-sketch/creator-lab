@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 
 const databaseUrl =
+  process.env.POSTGRES_URL ??
   process.env.SUPABASE_DB_URL ??
   process.env.DATABASE_URL ??
   // Supabase transaction pooler format: postgresql://postgres.PROJECT_REF:PASSWORD@aws-0-REGION.pooler.supabase.com:6543/postgres
