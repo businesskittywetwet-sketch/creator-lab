@@ -17,6 +17,7 @@ import { connectionFor, PLATFORMS } from "@/lib/services/platforms";
 /* ------------------------------------------------------------------ */
 
 export type NotifyInput = {
+  userId?: string;
   severity: "info" | "success" | "warning" | "error";
   category: string;
   title: string;
@@ -26,10 +27,12 @@ export type NotifyInput = {
 };
 
 export async function notify(input: NotifyInput) {
+  if (!input.userId) return;
   try {
     await db
       .insert(notifications)
       .values({
+        userId: input.userId,
         severity: input.severity,
         category: input.category,
         title: input.title,

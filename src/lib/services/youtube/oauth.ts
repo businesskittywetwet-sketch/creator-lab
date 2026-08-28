@@ -254,10 +254,13 @@ export async function persistConnection(
   tokens: StoredTokens,
   identity: AccountIdentity,
 ) {
+  const [channel] = await db.select({ userId: channels.userId }).from(channels).where(eq(channels.id, channelId));
+  if (!channel) throw new Error("Channel not found");
   const encrypted = encryptJson(tokens);
   await db
     .insert(publishAccounts)
     .values({
+      userId: channel.userId,
       channelId,
       platform: "youtube",
       displayName: identity.channelTitle,

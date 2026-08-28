@@ -41,7 +41,7 @@ function mulberry32(seed: number) {
   };
 }
 
-export async function seedDatabase(): Promise<{ ok: true }> {
+export async function seedDatabase(userId: string): Promise<{ ok: true }> {
   const rand = mulberry32(1337);
   const now = Date.now();
   const mins = (n: number) => new Date(now - n * 60_000);
@@ -138,7 +138,7 @@ export async function seedDatabase(): Promise<{ ok: true }> {
         active: false,
         createdAt: days(12),
       },
-    ])
+    ].map((row) => ({ ...row, userId })))
     .returning();
 
   void retroGaming; // kept as the seeded "inactive" channel example
@@ -376,7 +376,7 @@ export async function seedDatabase(): Promise<{ ok: true }> {
   await db.insert(agents).values(agentRows.map((a) => ({ ...a })));
 
   /* -------------------------- story sources ------------------------ */
-  await db.insert(storySources).values(DEFAULT_SOURCES);
+  await db.insert(storySources).values(DEFAULT_SOURCES.map((row) => ({ ...row, userId })));
 
   /* ----------------------------- stories --------------------------- */
   await db
@@ -395,11 +395,11 @@ export async function seedDatabase(): Promise<{ ok: true }> {
       { channelId: movieSecrets.id, title: "The Wilhelm Scream Appears in 400+ Films", summary: "One 1951 sound effect became cinema's longest-running inside joke.", sourceName: "Sound design history", sourceUrl: "https://film.example.com/wilhelm", score: 45, status: "rejected", tags: ["overdone"], createdAt: days(4) },
       { channelId: weirdHistory.id, title: "The Exploding Whale of Florence, Oregon", summary: "In 1970 officials used 20 cases of dynamite to remove a beached whale. It went exactly as well as you'd expect.", sourceName: "KATU archive footage", sourceUrl: "https://news.example.com/whale", score: 93, status: "used", tags: ["disasters", "absurd-history"], createdAt: days(11) },
       { channelId: darkMysteries.id, title: "Dyatlov Pass: The Theory That Almost Explains It", summary: "Nine hikers, a tent cut from inside, and an avalanche model that finally fits — almost.", sourceName: "Nature Communications", sourceUrl: "https://nature.example.com/dyatlov", score: 87, status: "used", tags: ["mountains", "unsolved"], createdAt: days(8) },
-    ])
+    ].map((row) => ({ ...row, userId })))
     .returning();
 
   /* ----------------------------- content --------------------------- */
-  const contentSeed: (typeof content.$inferInsert)[] = [
+  const contentSeed: Omit<typeof content.$inferInsert, "userId">[] = [
     { channelId: weirdHistory.id, title: "The Great London Beer Flood of 1814", format: "Short", stage: "discovered", score: 71, assignedAgents: ["story-scout"], durationSec: null, createdAt: days(2), updatedAt: hours(30) },
     { channelId: darkMysteries.id, title: "Flight 19: Five Bombers That Never Came Back", format: "Short", stage: "discovered", score: 68, assignedAgents: ["story-scout"], durationSec: null, createdAt: days(2), updatedAt: hours(28) },
     { channelId: weirdHistory.id, title: "Napoleon Was Attacked by 3,000 Rabbits", format: "Short", stage: "selected", score: 79, hook: "The Emperor of France fled from bunnies.", assignedAgents: ["story-scout", "story-judge"], durationSec: null, createdAt: days(2), updatedAt: hours(20) },
@@ -418,7 +418,7 @@ export async function seedDatabase(): Promise<{ ok: true }> {
     { channelId: darkMysteries.id, title: "Dyatlov Pass: The Theory That Almost Explains It", format: "Long-form", stage: "published", score: 87, hook: "Nine hikers. One tent cut open from inside.", assignedAgents: ["publishing-agent", "analytics-agent"], durationSec: 690, publishedAt: days(6), createdAt: days(9), updatedAt: days(6) },
     { channelId: movieSecrets.id, title: "Coraline's Buttons Were Never About Eyes", format: "Short", stage: "published", score: 84, hook: "The buttons track something much darker.", assignedAgents: ["publishing-agent", "analytics-agent"], durationSec: 45, publishedAt: days(2), createdAt: days(4), updatedAt: days(2) },
   ];
-  const contentRows = await db.insert(content).values(contentSeed).returning();
+  const contentRows = await db.insert(content).values(contentSeed.map((row) => ({ ...row, userId }))).returning();
   const byTitle = new Map(contentRows.map((c) => [c.title, c]));
 
   /* --------------------------- workflows --------------------------- */
@@ -534,7 +534,7 @@ export async function seedDatabase(): Promise<{ ok: true }> {
   await db
     .insert(automationSettings)
     .values({
-      id: 1,
+      userId,
       enabled: true,
       discoveryIntervalHours: 6,
       publishWindowStart: "09:00",

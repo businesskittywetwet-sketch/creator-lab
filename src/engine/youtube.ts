@@ -219,6 +219,7 @@ export async function maintainTokens(): Promise<{ checked: number; expired: numb
   let expired = 0;
   for (const a of accounts) {
     if (!a.encryptedTokens || a.revokedAt) continue;
+    if (!a.channelId) continue;
     const res = await getAccessToken(a.channelId);
     if (!res.ok && res.needsReconnect) {
       expired += 1;

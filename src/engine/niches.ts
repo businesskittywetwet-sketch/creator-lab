@@ -89,7 +89,7 @@ export type NicheInput = {
  * publishing profile. Everything is configuration — no code changes
  * are required to add a niche.
  */
-export async function createNiche(input: NicheInput) {
+export async function createNiche(userId: string, input: NicheInput) {
   const name = input.name.trim();
   if (!name) return { ok: false as const, error: "Niche name is required." };
 
@@ -106,6 +106,7 @@ export async function createNiche(input: NicheInput) {
   const [channel] = await db
     .insert(channels)
     .values({
+      userId,
       slug,
       name,
       niche: input.description?.slice(0, 120) ?? name,
@@ -121,6 +122,7 @@ export async function createNiche(input: NicheInput) {
   const [niche] = await db
     .insert(niches)
     .values({
+      userId,
       slug,
       name,
       description: input.description ?? "",
@@ -309,7 +311,7 @@ export async function duplicateNiche(id: string, newName?: string) {
     ? (await db.select().from(channelStrategy).where(eq(channelStrategy.channelId, src.channelId)))[0]
     : undefined;
 
-  const created = await createNiche({
+  const created = await createNiche(src.userId, {
     name: newName?.trim() || `${src.name} (copy)`,
     description: src.description,
     color: src.color,
@@ -357,6 +359,7 @@ export async function duplicateNiche(id: string, newName?: string) {
   const srcSources = await db.select().from(storySources).where(eq(storySources.nicheId, id));
   for (const s of srcSources) {
     await db.insert(storySources).values({
+      userId: s.userId,
       type: s.type,
       name: `${s.name} (copy)`,
       enabled: s.enabled,
@@ -419,6 +422,7 @@ export async function addSource(input: SourceInput) {
   const [row] = await db
     .insert(storySources)
     .values({
+      userId: niche.userId,
       type: input.type,
       name: input.name,
       enabled: input.enabled ?? true,
@@ -550,6 +554,7 @@ export async function adoptLegacyChannels(): Promise<number> {
     const [n] = await db
       .insert(niches)
       .values({
+        userId: c.userId,
         slug: c.slug,
         name: c.name,
         description: c.description,

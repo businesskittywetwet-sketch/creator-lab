@@ -60,10 +60,10 @@ export type ScoutStats = {
 
 import { DEFAULT_SOURCES } from "./default-sources";
 
-export async function ensureDefaultSources() {
+export async function ensureDefaultSources(userId: string) {
   const existing = await db.select({ id: storySources.id }).from(storySources).limit(1);
   if (existing.length === 0) {
-    await db.insert(storySources).values(DEFAULT_SOURCES);
+    await db.insert(storySources).values(DEFAULT_SOURCES.map((row) => ({ ...row, userId })));
   }
 }
 
@@ -144,7 +144,7 @@ function associateChannel(
 /* ------------------------------- judge ----------------------------- */
 
 async function judgeStory(
-  item: { id: string; title: string; summary: string; sourceUrl: string; channelId: string | null },
+  item: { id: string; userId: string; title: string; summary: string; sourceUrl: string; channelId: string | null },
   meta: { sourceName: string; sourceReliability: number; signals: RawStoryItem["signals"] },
   channelRows: (typeof channels.$inferSelect)[],
   threshold: number,
@@ -219,6 +219,7 @@ async function judgeStory(
       const [createdContent] = await db
         .insert(content)
         .values({
+          userId: item.userId,
           channelId: item.channelId,
           storyId: item.id,
           title: item.title,
@@ -280,9 +281,12 @@ export async function runScoutCycle(
     errors: [],
   };
 
-  await ensureDefaultSources();
-  const settings = await getAutomationSettings();
-  const channelRows = await db.select().from(channels);
+  const [settingsOwner] = await db.select({ userId: automationSettings.userId }).from(automationSettings).limit(1);
+  if (!settingsOwner) throw new Error("No automation settings owner is available");
+  const userId = settingsOwner.userId;
+  await ensureDefaultSources(userId);
+  const settings = await getAutomationSettings(userId);
+  const channelRows = await db.select().from(channels).where(eq(channels.userId, userId));
 
   const [runRow] = await db
     .insert(agentRuns)
@@ -291,6 +295,7 @@ export async function runScoutCycle(
   const [jobRow] = await db
     .insert(automationJobs)
     .values({
+      userId,
       type: "story_discovery",
       label: "Story discovery sweep",
       status: "running",
@@ -431,6 +436,7 @@ export async function runScoutCycle(
         .insert(stories)
         .values(
           fresh.map((n) => ({
+            userId,
             channelId: associateChannel(n, channelRows),
             title: n.title,
             summary: n.summary,
@@ -561,7 +567,7 @@ export async function runScoutCycle(
 
   // On failure with auto-retry, queue a real retry run into the queue.
   if (!stats.ok) {
-    const settingsRow = await getAutomationSettings();
+    const settingsRow = await getAutomationSettings(userId);
     if (settingsRow.autoRetry) {
       await db.insert(automationJobs).values({
         type: "story_discovery",
@@ -575,7 +581,7 @@ export async function runScoutCycle(
     }
   }
 
-  const settingsNow = await getAutomationSettings();
+  const settingsNow = await getAutomationSettings(userId);
   await db
     .update(automationSettings)
     .set({
@@ -583,7 +589,7 @@ export async function runScoutCycle(
       nextRunAt: new Date(Date.now() + settingsNow.discoveryIntervalHours * 3600_000),
       updatedAt: new Date(),
     })
-    .where(eq(automationSettings.id, 1));
+    .where(eq(automationSettings.userId, userId));
 
   console.log(
     `[scout] cycle complete (${trigger}): found=${stats.found} inserted=${stats.inserted} judged=${stats.judged} selected=${stats.selected} rejected=${stats.rejected} sourcesFailed=${stats.sourcesFailed} duration=${stats.durationMs}ms`,

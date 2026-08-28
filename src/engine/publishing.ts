@@ -84,6 +84,7 @@ export async function syncAccountsForChannel(channelId: string) {
     await db
       .insert(publishAccounts)
       .values({
+        userId: ch?.userId ?? (() => { throw new Error("Channel not found"); })(),
         channelId,
         platform,
         displayName: `${ch?.name ?? "Channel"} · ${platform}`,
@@ -282,6 +283,7 @@ export async function createPublishJobsForContent(
     const [row] = await db
       .insert(publishJobs)
       .values({
+        userId: item.userId,
         contentId,
         draftId: draft?.id ?? null,
         channelId: item.channelId,
@@ -494,6 +496,7 @@ export async function dispatchPublishJob(
     await db
       .insert(publishedPosts)
       .values({
+        userId: job.userId,
         jobId,
         contentId: job.contentId,
         channelId: job.channelId,

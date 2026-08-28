@@ -120,7 +120,7 @@ export async function advanceStoryToContent(storyId: string) {
 /* ------------------------------ automation ------------------------ */
 
 export async function toggleAutomation(enabled: boolean) {
-  await engine.setAutomationEnabled(enabled);
+  await engine.setAutomationEnabled(await requireUserId(), enabled);
   revalidatePath("/automation");
   revalidatePath("/overview");
 }
@@ -130,7 +130,7 @@ export async function saveAutomationConfig(
   formData: FormData,
 ): Promise<ActionState> {
   try {
-    await engine.updateAutomationConfig({
+    await engine.updateAutomationConfig(await requireUserId(), {
       discoveryIntervalHours: Number(formData.get("discoveryIntervalHours") ?? 6),
       publishWindowStart: String(formData.get("publishWindowStart") ?? "09:00"),
       publishWindowEnd: String(formData.get("publishWindowEnd") ?? "21:00"),
@@ -289,7 +289,7 @@ export async function saveProductionSettings(
 /* ------------------------------ system ---------------------------- */
 
 export async function reseedDatabase(): Promise<void> {
-  await seedDatabase();
+  await seedDatabase(await requireUserId());
   revalidatePath("/");
 }
 
@@ -540,7 +540,8 @@ export async function createNicheAction(
       const v = formData.get(`w_${key}`);
       if (v !== null) weights[key] = Number(v) || 0;
     }
-    const res = await engine.createNiche({
+    const userId = await requireUserId();
+    const res = await engine.createNiche(userId, {
       name: String(formData.get("name") ?? ""),
       description: String(formData.get("description") ?? ""),
       color: String(formData.get("color") ?? "#C6F135"),

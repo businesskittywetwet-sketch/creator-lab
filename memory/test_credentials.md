@@ -4,7 +4,7 @@
 - Project ref: `dngdrbdtmlofmekfxlcv`
 - URL: https://dngdrbdtmlofmekfxlcv.supabase.co
 - Database password (as provided by user): `Dokeyball22!`
-- Pooler (Transaction, port 6543): `postgresql://postgres.dngdrbdtmlofmekfxlcv:Dokeyball22%21@aws-0-us-east-1.pooler.supabase.com:6543/postgres`
+- Pooler (Transaction, port 6543): configured locally via `SUPABASE_DB_URL` / `DATABASE_URL` (credential redacted)
 
 ## Generated in this session (never re-generate — rotating invalidates YouTube tokens)
 See `/tmp/generated-secrets.txt` and `/app/.env`:

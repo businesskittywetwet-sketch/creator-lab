@@ -4,20 +4,21 @@ import { eq } from "drizzle-orm";
 
 /* Single-row automation configuration. */
 
-export async function getAutomationSettings() {
-  const rows = await db.select().from(automationSettings).limit(1);
+export async function getAutomationSettings(userId?: string) {
+  if (!userId) throw new Error("A user ID is required for automation settings");
+  const rows = await db.select().from(automationSettings).where(eq(automationSettings.userId, userId)).limit(1);
   if (rows[0]) return rows[0];
-  await db.insert(automationSettings).values({ id: 1 }).onConflictDoNothing();
-  const again = await db.select().from(automationSettings).limit(1);
+  await db.insert(automationSettings).values({ userId }).onConflictDoNothing();
+  const again = await db.select().from(automationSettings).where(eq(automationSettings.userId, userId)).limit(1);
   return again[0];
 }
 
-export async function setAutomationEnabled(enabled: boolean) {
-  await getAutomationSettings();
+export async function setAutomationEnabled(userId: string, enabled: boolean) {
+  await getAutomationSettings(userId);
   await db
     .update(automationSettings)
     .set({ enabled, updatedAt: new Date() })
-    .where(eq(automationSettings.id, 1));
+    .where(eq(automationSettings.userId, userId));
 }
 
 export type AutomationConfigInput = {
@@ -33,9 +34,9 @@ export type AutomationConfigInput = {
   retryDelayMinutes: number;
 };
 
-export async function updateAutomationConfig(input: AutomationConfigInput) {
-  await getAutomationSettings();
-  const current = await getAutomationSettings();
+export async function updateAutomationConfig(userId: string, input: AutomationConfigInput) {
+  await getAutomationSettings(userId);
+  const current = await getAutomationSettings(userId);
   const nextRunAt = current.lastRunAt
     ? new Date(
         new Date(current.lastRunAt).getTime() +
@@ -45,5 +46,5 @@ export async function updateAutomationConfig(input: AutomationConfigInput) {
   await db
     .update(automationSettings)
     .set({ ...input, nextRunAt, updatedAt: new Date() })
-    .where(eq(automationSettings.id, 1));
+    .where(eq(automationSettings.userId, userId));
 }
