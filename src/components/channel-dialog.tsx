@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Pencil, Plus, X } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { createChannel, updateChannel, type ActionState } from "@/app/actions";
 import { PLATFORM_SHORT } from "@/components/ui";
 import { SubmitButton } from "@/components/controls";
+import ModalDialog from "@/components/modal-dialog";
 
 export type ChannelDraft = {
   id?: string;
@@ -57,29 +58,20 @@ export default function ChannelDialog({ channel }: { channel?: ChannelDraft }) {
       )}
 
       {open && (
-        <div className="fixed inset-0 z-[80] grid place-items-center p-4">
-          <button
-            aria-label="Close"
-            onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          />
-          <div className="panel relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-[#0a0c12] p-6 shadow-2xl animate-fade-up">
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <p className="eyebrow mb-1.5">Channels</p>
-                <h3 className="font-display text-lg font-bold text-white">
-                  {channel ? "Edit channel" : "Create channel"}
-                </h3>
-              </div>
-              <button
-                onClick={() => setOpen(false)}
-                className="grid size-8 place-items-center rounded-lg border border-white/[0.08] text-zinc-500 hover:text-white"
-              >
-                <X className="size-4" />
+        <ModalDialog
+          eyebrow="Channels"
+          title={channel ? "Edit channel" : "Create channel"}
+          onClose={() => setOpen(false)}
+          footer={
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-400 transition hover:text-white">
+                Cancel
               </button>
+              <SubmitButton form="channel-form" label={channel ? "Save changes" : "Create channel"} />
             </div>
-
-            <form action={formAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          }
+        >
+            <form id="channel-form" action={formAction} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {channel?.id && <input type="hidden" name="id" value={channel.id} />}
 
               <div>
@@ -162,19 +154,8 @@ export default function ChannelDialog({ channel }: { channel?: ChannelDraft }) {
                 </p>
               )}
 
-              <div className="flex justify-end gap-2 pt-2 sm:col-span-2">
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-400 transition hover:text-white"
-                >
-                  Cancel
-                </button>
-                <SubmitButton label={channel ? "Save changes" : "Create channel"} />
-              </div>
             </form>
-          </div>
-        </div>
+        </ModalDialog>
       )}
     </>
   );

@@ -100,11 +100,12 @@ export function ChannelDelete({ id }: { id: string }) {
   );
 }
 
-export function SubmitButton({ label }: { label: string }) {
+export function SubmitButton({ label, form }: { label: string; form?: string }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
+      form={form}
       disabled={pending}
       className="inline-flex items-center gap-2 rounded-lg bg-signal px-4 py-2 text-sm font-semibold text-black transition hover:brightness-110 disabled:opacity-60"
     >

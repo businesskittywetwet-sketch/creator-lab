@@ -1,10 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Trash2 } from "lucide-react";
 import { createNicheAction, type ActionState } from "@/app/actions";
 import { SubmitButton } from "@/components/controls";
 import { PLATFORM_DISPLAY } from "@/lib/platform-meta";
+import ModalDialog from "@/components/modal-dialog";
 
 /* Guided niche setup. Everything here is configuration — creating a
    niche never requires a code change. */
@@ -85,21 +86,26 @@ export default function NicheWizard() {
   const show = (i: number) => (step === i ? "block" : "hidden");
 
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center p-4">
-      <button aria-label="Close" onClick={() => setOpen(false)}
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="panel relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-[#0a0c12] p-6 shadow-2xl animate-fade-up">
-        <div className="mb-5 flex items-start justify-between">
-          <div>
-            <p className="eyebrow mb-1.5">New niche · step {step + 1} of {STEPS.length}</p>
-            <h3 className="font-display text-lg font-bold text-white">{STEPS[step]}</h3>
-          </div>
-          <button onClick={() => setOpen(false)}
-            className="grid size-8 place-items-center rounded-lg border border-white/[0.08] text-zinc-500 hover:text-white">
-            <X className="size-4" />
+    <ModalDialog
+      eyebrow={`New niche · step ${step + 1} of ${STEPS.length}`}
+      title={STEPS[step]}
+      maxWidth="3xl"
+      onClose={() => setOpen(false)}
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <button type="button" disabled={step === 0} onClick={() => setStep((s) => s - 1)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400 disabled:opacity-30">
+            <ArrowLeft className="size-3.5" /> Back
           </button>
+          {step < STEPS.length - 1 ? (
+            <button type="button" onClick={() => setStep((s) => s + 1)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-signal/40 bg-signal/10 px-3.5 py-2 text-sm text-signal">
+              Next <ArrowRight className="size-3.5" />
+            </button>
+          ) : <SubmitButton form="niche-wizard-form" label="Create & activate niche" />}
         </div>
-
+      }
+    >
         {/* progress rail */}
         <div className="mb-6 flex gap-1">
           {STEPS.map((s, i) => (
@@ -108,7 +114,7 @@ export default function NicheWizard() {
           ))}
         </div>
 
-        <form action={formAction} className="space-y-4">
+        <form id="niche-wizard-form" action={formAction} className="space-y-4">
           <input type="hidden" name="sources" value={JSON.stringify(sources)} />
 
           {/* 1 identity */}
@@ -334,28 +340,12 @@ export default function NicheWizard() {
             )}
           </div>
 
-          {/* nav */}
-          <div className="flex items-center justify-between border-t border-white/[0.06] pt-4">
-            <button type="button" disabled={step === 0} onClick={() => setStep((s) => s - 1)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400 disabled:opacity-30">
-              <ArrowLeft className="size-3.5" /> Back
-            </button>
-            {step < STEPS.length - 1 ? (
-              <button type="button" onClick={() => setStep((s) => s + 1)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-signal/40 bg-signal/10 px-3.5 py-2 text-sm text-signal">
-                Next <ArrowRight className="size-3.5" />
-              </button>
-            ) : (
-              <SubmitButton label="Create & activate niche" />
-            )}
-          </div>
         </form>
 
         <p className="mt-3 flex items-center gap-1.5 font-mono text-[10px] text-zinc-600">
           <Sparkles className="size-3" /> One scout engine + one production engine, driven entirely by this configuration.
           <Check className="size-3 text-signal" />
         </p>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
