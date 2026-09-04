@@ -13,6 +13,44 @@ type ModalDialogProps = {
   onClose: () => void;
 };
 
+type WizardDialogProps = Omit<ModalDialogProps, "eyebrow" | "footer"> & {
+  step: number;
+  steps: readonly string[];
+  onBack: () => void;
+  onNext: () => void;
+  nextDisabled?: boolean;
+  formId: string;
+  submitLabel: string;
+};
+
+/** Fixed-progress wizard controls shared by all create and edit flows. */
+export function WizardDialog({
+  step, steps, onBack, onNext, nextDisabled = false, formId, submitLabel, ...props
+}: WizardDialogProps) {
+  const lastStep = step === steps.length - 1;
+  return (
+    <ModalDialog
+      {...props}
+      eyebrow={`Step ${step + 1} of ${steps.length}`}
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <button type="button" disabled={step === 0} onClick={onBack} className="rounded-lg border border-white/10 px-4 py-2 text-sm text-zinc-400 disabled:opacity-30">Back</button>
+          {lastStep ? (
+            <button type="submit" form={formId} className="rounded-lg bg-signal px-4 py-2 text-sm font-semibold text-black">{submitLabel}</button>
+          ) : (
+            <button type="button" disabled={nextDisabled} onClick={onNext} className="rounded-lg bg-signal px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">Next</button>
+          )}
+        </div>
+      }
+    >
+      <div className="mb-5 flex gap-1" aria-label={`Step ${step + 1} of ${steps.length}`}>
+        {steps.map((label, index) => <span key={label} className="h-1 flex-1 rounded-full" style={{ background: index <= step ? "#c6f135" : "rgba(255,255,255,0.12)" }} />)}
+      </div>
+      {props.children}
+    </ModalDialog>
+  );
+}
+
 /** Shared viewport-safe dialog frame for creation and settings forms. */
 export default function ModalDialog({
   title,

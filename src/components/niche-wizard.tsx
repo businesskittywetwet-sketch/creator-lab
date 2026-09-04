@@ -1,11 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Check, Plus, Sparkles, Trash2 } from "lucide-react";
 import { createNicheAction, type ActionState } from "@/app/actions";
-import { SubmitButton } from "@/components/controls";
 import { PLATFORM_DISPLAY } from "@/lib/platform-meta";
-import ModalDialog from "@/components/modal-dialog";
+import { WizardDialog } from "@/components/modal-dialog";
 
 /* Guided niche setup. Everything here is configuration — creating a
    niche never requires a code change. */
@@ -86,33 +85,17 @@ export default function NicheWizard() {
   const show = (i: number) => (step === i ? "block" : "hidden");
 
   return (
-    <ModalDialog
-      eyebrow={`New niche · step ${step + 1} of ${STEPS.length}`}
+    <WizardDialog
       title={STEPS[step]}
+      step={step}
+      steps={STEPS}
       onClose={() => setOpen(false)}
-      footer={
-        <div className="flex items-center justify-between gap-3">
-          <button type="button" disabled={step === 0} onClick={() => setStep((s) => s - 1)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm text-zinc-400 disabled:opacity-30">
-            <ArrowLeft className="size-3.5" /> Back
-          </button>
-          {step < STEPS.length - 1 ? (
-            <button type="button" onClick={() => setStep((s) => s + 1)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-signal/40 bg-signal/10 px-3.5 py-2 text-sm text-signal">
-              Next <ArrowRight className="size-3.5" />
-            </button>
-          ) : <SubmitButton form="niche-wizard-form" label="Create & activate niche" />}
-        </div>
-      }
+      onBack={() => setStep((s) => s - 1)}
+      onNext={() => setStep((s) => s + 1)}
+      nextDisabled={step === 0 && !name.trim()}
+      formId="niche-wizard-form"
+      submitLabel="Create & activate niche"
     >
-        {/* progress rail */}
-        <div className="mb-6 flex gap-1">
-          {STEPS.map((s, i) => (
-            <div key={s} className="h-1 flex-1 rounded-full"
-              style={{ background: i <= step ? "#c6f135" : "rgba(255,255,255,0.08)" }} />
-          ))}
-        </div>
-
         <form id="niche-wizard-form" action={formAction} className="space-y-4">
           <input type="hidden" name="sources" value={JSON.stringify(sources)} />
 
@@ -345,6 +328,6 @@ export default function NicheWizard() {
           <Sparkles className="size-3" /> One scout engine + one production engine, driven entirely by this configuration.
           <Check className="size-3 text-signal" />
         </p>
-    </ModalDialog>
+    </WizardDialog>
   );
 }
