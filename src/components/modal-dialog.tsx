@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 type ModalDialogProps = {
@@ -44,7 +45,7 @@ export default function ModalDialog({
     };
   }, []);
 
-  return (
+  const dialog = (
     <div className="fixed inset-0 z-[80] isolate flex h-[100dvh] w-screen items-center justify-center overflow-hidden p-2 sm:p-6">
       <button
         aria-label="Close dialog"
@@ -81,4 +82,10 @@ export default function ModalDialog({
       </section>
     </div>
   );
+
+  // This must live directly below <body>. The create/edit triggers are often
+  // rendered in PageHeader, whose entrance animation has a CSS transform.
+  // A transformed ancestor becomes the containing block for position: fixed,
+  // placing an inline dialog relative to the header instead of the viewport.
+  return typeof document === "undefined" ? null : createPortal(dialog, document.body);
 }
