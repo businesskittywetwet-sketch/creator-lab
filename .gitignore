@@ -1,6 +1,7 @@
 public/generated/
 .env
 .env.local
+memory/test_credentials.md
 .next/
 node_modules/
 .pnpm-store/
