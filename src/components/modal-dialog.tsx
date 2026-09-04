@@ -46,7 +46,7 @@ export default function ModalDialog({
   }, []);
 
   const dialog = (
-    <div className="fixed inset-0 z-[80] isolate flex h-[100dvh] w-screen items-center justify-center overflow-hidden p-2 sm:p-6">
+    <div className="fixed inset-0 z-[80] isolate flex h-[100dvh] w-screen items-center justify-center overflow-hidden p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
       <button
         aria-label="Close dialog"
         onClick={onClose}
@@ -56,7 +56,7 @@ export default function ModalDialog({
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : "Dialog"}
-        className={`relative z-10 flex min-h-0 w-full ${maxWidth === "3xl" ? "max-w-3xl" : "max-w-2xl"} max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#090b10] shadow-[0_25px_80px_rgba(0,0,0,0.75)] animate-fade-up sm:max-h-[90dvh]`}
+        className={`relative z-10 flex min-h-0 w-full ${maxWidth === "3xl" ? "max-w-3xl" : "max-w-2xl"} max-h-[85dvh] flex-col overflow-hidden rounded-2xl border border-white/[0.12] bg-[#090b10] shadow-[0_25px_80px_rgba(0,0,0,0.75)] animate-fade-up sm:max-h-[90dvh]`}
       >
         <header className="relative z-10 shrink-0 border-b border-white/[0.08] bg-[#090b10] px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex items-start justify-between gap-4">
